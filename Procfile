@@ -1,1 +1,1 @@
-web: uvicorn main:app --env-file .env
+web: uvicorn main:app --host=0.0.0.0 --port=${PORT}
