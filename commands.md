@@ -46,12 +46,12 @@ pipreqs --force --ignore ".venv, .vscode, __pycache__"
 
 ## Iniciar aplicación (Heroku)
 ```
- heroku ps:scale web=0 --app tango-bot
+ heroku ps:scale web=1 --app tango-bot
  heroku maintenance:off --app tango-bot
 ```
 
 ## Detener aplicación (Heroku)
 ```
- heroku ps:scale web=1 --app tango-bot
+ heroku ps:scale web=0 --app tango-bot
  heroku maintenance:on --app tango-bot
 ```
