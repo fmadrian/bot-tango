@@ -1,10 +1,16 @@
+import os
+import aiohttp
+import asyncio
+import ast
+from datetime import datetime, timedelta
+
 from abc import ABCMeta, abstractmethod
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from strategy import DatabaseContext, DatabaseStrategyAsyncMongoDB
 # TODO: Mover a documento con solo texto.
-helpGuide = "Hola!"
+helpGuide = "Comandos disponibles:\n\n/start\n\n/help\n\n/login <usuario> <contraseña> \n\n/status\n\n/logout\n\n/ai <consulta>"
 
 # Interfaz
 class BotServiceInterface(metaclass=ABCMeta):
@@ -24,11 +30,18 @@ class BotServiceInterface(metaclass=ABCMeta):
     async def logout(cls, update: Update, context: ContextTypes.DEFAULT_TYPE):
         raise NotImplementedError
     
+    @classmethod
+    @abstractmethod
+    async def talkToAI(cls, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        raise NotImplementedError
+    
+    
 
 # Implement interface.
 class BotService(BotServiceInterface): 
+    # session = aiohttp.ClientSession()
     # Definir contexto y pasar MongoDB estrategía.
-    context: DatabaseContext = DatabaseContext(DatabaseStrategyAsyncMongoDB()) 
+    dbContext: DatabaseContext = DatabaseContext(DatabaseStrategyAsyncMongoDB()) 
 
     # Constructor
     def __init__(self):
@@ -47,25 +60,117 @@ class BotService(BotServiceInterface):
     @classmethod
     async def status(cls, update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Consultar si ya se inicio sesión.
-        result = BotService.context.get({"chat_id": update.effective_chat.id})
+        result = await BotService.dbContext.exists({"chat_id": update.effective_chat.id})
         text = "Ya inició sesión." if result == True else "No ha iniciado sesión."
         # Devolver respuesta.
         await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
     
+    # /login <username> <password>
     @classmethod
     async def login(cls, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # Llamar API y obtener el token.
-        bearerToken="example"
-        # Guardar token.
-        await BotService.context.create({"chat_id": update.effective_chat.id, "key": bearerToken})
-        text = "Ha iniciado sesión"
-        # Devolver respuesta.
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+        token=""
+        message=""
+        # Obtener parametros
+        params = update["message"]["text"].split(" ")
+        chat_id = update["message"]["chat"]["id"]
+        message_id = update["message"]["message_id"]
 
+        # Borrar mensaje.
+        await context.bot.delete_message(chat_id,message_id)
+
+        # comando <correo> <contraseña>
+        if(len(params) != 3):
+            message = "Ingrese su correo y contraseña. /login <correo> <contraseña>"
+        else:
+            # Llamar API y obtener el bearer token.
+            async with aiohttp.ClientSession() as session:
+                endpoint = "{}/users/login".format(os.getenv("UVICORN_API_URL"))
+                async with session.post(endpoint,json={"username" : params[1], "password": params[2]}) as response:
+                    # Revisar que sea HTTP 200.
+                    if(response.status == 200):
+                        # Remover "Bearer ".
+                        token= response.headers["Authorization"].replace("Bearer ", "")
+                        # Crear respuesta con nombre de usuario devuelto.
+                        json = await response.json()
+                        message="¡Bienvenido {}!".format(json["username"])
+                        # Crear registro en base de datos si existe, de lo contrario, actualizar el existente.
+                        # Cada registro contiene el ID de chat (único) y el token.
+                        exists = await BotService.dbContext.exists({"chat_id": update.effective_chat.id})
+                        if(exists == False):    
+                            await BotService.dbContext.create({"chat_id": update.effective_chat.id, "key": token})
+                        else:
+                            await BotService.dbContext.update({"chat_id": update.effective_chat.id, "key": token})
+                    else:
+                        message = "No se pudo iniciar sesión"
+        
+        # Devolver respuesta.
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
+
+    # /logout
     @classmethod
     async def logout(cls, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # Consultar si ya se inicio sesión.
-        result = BotService.context.delete({"chat_id": update.effective_chat.id})
+        # Eliminar token correspondiente al chat.
+        await BotService.dbContext.delete({"chat_id": update.effective_chat.id})
         text = "Ha cerrado sesión"
         # Devolver respuesta.
         await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+
+    # /ai
+    @classmethod
+    async def talkToAI(cls, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        message = ""
+        try:
+            loginError="Debe iniciar sesión para poder hablar con la IA.\nUtilice el comando /login <usuario> <contraseña>"
+            # Consultar si ya se inicio sesión.
+            userInformation = await BotService.dbContext.get({"chat_id": update.effective_chat.id})
+            if(userInformation is not None):
+                # Obtener recomendación desde API
+                query = update["message"]["text"].replace("/ai ", "")
+                params = {"provider":"openaiservice", "question":query}
+                async with aiohttp.ClientSession() as session:
+                    endpoint = "{}/unsecure/ia/ask".format(os.getenv("UVICORN_API_URL"))
+                    async with session.get(endpoint, params=params) as response:
+                        # TODO: Hacer API responder en JSON y no en texto (que tiene forma de JSON).
+                        # Convertir respuesta que viene en texto a JSON.
+                        # Y después extraer el campo "answer".
+                        answer = (ast.literal_eval(await response.text()))["answer"]
+                        # Revisar que sea HTTP 200.
+                        if(response.status == 200):  
+                            try:                            
+                                # Intentar conseguir JSON con productos.
+                                # Por cada producto, se debe mapear los campos "cantidad" por "quantity"  y crear campo "product" 
+                                # para que coinicidan con los esperados por API.
+                                temp = (ast.literal_eval(answer))["productos"]
+                                products = list(map(lambda p: {
+                                    "product": {
+                                        "id":int(p["id"])
+                                    }, 
+                                    "quantity":p["cantidad"]
+                                }, temp))
+                                # Crear orden y devolver información de orden
+                                additonalInformation = "Orden generada con ayuda de ChatGPT desde el bot en Telegram."
+                                deliveryDate =  datetime.now() + timedelta(days=10)
+                                order = {"orderDetails": products, "additonalInformation": additonalInformation, "deliveryDate": "{}-{}-{}".format(deliveryDate.year, deliveryDate.month, deliveryDate.day)}
+                                endpoint = "{}/order".format(os.getenv("UVICORN_API_URL"))
+                                headers={"Authorization" : "Bearer {}".format(userInformation["key"])}
+                                async with session.post(endpoint, json=order, headers=headers) as orderResponse:
+                                    print("[Resultado] [orden] HTTP:" + orderResponse.status)
+                                    orderJSON = await orderResponse.json()
+                                    # Mostrar orden de manera que el usuario entienda
+                                    message = orderJSON
+                            except (ValueError, SyntaxError) as e:
+                                print("[Resultado] [recomendación].")
+                                # Si no se puede parsear JSON, es una recomendación.
+                                message = answer
+                        elif(response.status == 403):   
+                            message = loginError
+                        else:
+                            print("[ERROR] [IA] [orden]: Error obteniendo productos en respuesta de IA")
+                            message = "De momento no puedo atender este mensaje."
+            else:
+                message = loginError
+        except Exception as e:
+            print("[ERROR] [IA]: Error obteniendo respuesta de IA")
+            message = "De momento no puedo atender este mensaje. ex"
+
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
