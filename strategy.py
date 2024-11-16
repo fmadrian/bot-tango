@@ -42,7 +42,10 @@ class DatabaseContext():
         await self._strategy.create(data)
 
     async def get(self,data):
-        await self._strategy.get(data)
+        return await self._strategy.get(data)
+
+    async def exists(self,data):
+        return await self._strategy.exists(data)
 
     async def update(self,data):
         await self._strategy.update(data)
@@ -69,7 +72,11 @@ class DatabaseStrategy(ABC):
         pass
 
     @abstractmethod
-    def get(self, data) -> bool:
+    def get(self, data):
+        pass
+
+    @abstractmethod
+    def exists(self, data):
         pass
 
     @abstractmethod
@@ -89,25 +96,27 @@ class DatabaseStrategyAsyncMongoDB(DatabaseStrategy):
 
 
     async def create(self, data):
-        # Crear registro en base de datos si existe, de lo contrario, actualizar el existente.
-        exists = await self.get({"chat_id": data["chat_id"]})
-        if(exists == False):
-            await DatabaseStrategyAsyncMongoDB.collection.insert_one({"_id": ObjectId(), "chat_id": data["chat_id"], "key": data["key"]})
-        else:
-            await self.update(data)
+        data = {"_id": ObjectId(), "chat_id": data["chat_id"], "key": data["key"]}
+        await DatabaseStrategyAsyncMongoDB.collection.insert_one(data)
 
     async def update(self, data):
-        query = { "chat_id": data["chat_id"] }
+        query = {"chat_id" : {"$eq": data["chat_id"]}}
         values = { "$set": { "key": data["key"] } }
         await DatabaseStrategyAsyncMongoDB.collection.update_one(query, values)
 
+    async def exists(self, data):
+        query = {"chat_id" : {"$eq": data["chat_id"]}}
+        result = await DatabaseStrategyAsyncMongoDB.collection.find_one(query)
+        return result is not None
+        
     async def get(self, data):
-        result = await DatabaseStrategyAsyncMongoDB.collection.find_one(data)
-        print(result != None)
-        return result != None 
+        query = {"chat_id" : {"$eq": data["chat_id"]}}
+        result = await DatabaseStrategyAsyncMongoDB.collection.find_one(query)
+        return result
     
     async def delete(self, data):
-         await DatabaseStrategyAsyncMongoDB.collection.delete_one(data)
+         query = {"chat_id" : {"$eq": data["chat_id"]}}
+         await DatabaseStrategyAsyncMongoDB.collection.delete_one(query)
 
 
 """
