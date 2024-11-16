@@ -1,8 +1,7 @@
-# main.py
+import os
 # Local imports
 from services import BotService
 # Other imports
-import os
 from contextlib import asynccontextmanager
 from http import HTTPStatus
 from telegram import Update
@@ -44,3 +43,7 @@ async def process_update(request: Request):
 # Añadir los diferentes tipos de eventos que el bot maneja.
 ptb.add_handler(CommandHandler("start", BotService.start))
 ptb.add_handler(CommandHandler("help", BotService.start))
+ptb.add_handler(CommandHandler("status", BotService.status))
+ptb.add_handler(CommandHandler("login", BotService.login))
+ptb.add_handler(CommandHandler("logout", BotService.logout))
+ptb.add_handler(CommandHandler("ai", BotService.talkToAI))

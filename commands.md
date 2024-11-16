@@ -1,12 +1,10 @@
 # Commands
 
-## Running venv
+## venv
 
-Reference: [https://docs.python.org/3/library/venv.html](https://docs.python.org/3/library/venv.html)
+Referencia: [https://docs.python.org/3/library/venv.html](https://docs.python.org/3/library/venv.html)
 
-venvdir: Directory where venv is located.
-botdir: Directory where the bot entry point is located.
-
+venvdir: Folder donde .venv se encuentra.
 ### Commands
 
 Load environment:
@@ -15,31 +13,45 @@ Load environment:
 cd <botdir> python bot.py
 ```
 
-## Running uvicorn
+## Uvicorn
 
-How to run uvicorn (locally):
-
-```
-uvicorn main:app --reload --env-file config.env
-```
-
-How to run uvicorn (remotely):
+¿Cómo correr uvicorn (y el API) localmente?:
 
 ```
-uvicorn main:app --env-file config.env
+uvicorn main:app --reload --env-file .env
 ```
 
-## Running ngrok
+¿Cómo correr uvicorn en Heroku?:
 
-How to run ngrok:
+En Procfile:
+
+```
+web: uvicorn main:app --host=0.0.0.0 --port=${PORT}
+```
+
+## ngrok (pruebas locales)
+
+¿Cómo ejecutar ngrok?
 
 ```
 ngrok http 8000
 ```
 
-## Create requirements list
+## Crear lista de requerimientos
 
 ```
 pip install pipreqs
 pipreqs --force --ignore ".venv, .vscode, __pycache__"
+```
+
+## Iniciar aplicación (Heroku)
+```
+ heroku ps:scale web=1 --app tango-bot
+ heroku maintenance:off --app tango-bot
+```
+
+## Detener aplicación (Heroku)
+```
+ heroku ps:scale web=0 --app tango-bot
+ heroku maintenance:on --app tango-bot
 ```
