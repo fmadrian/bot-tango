@@ -136,7 +136,8 @@ class BotService(BotServiceInterface):
                         answer = (ast.literal_eval(await response.text()))["answer"]
                         # Revisar que sea HTTP 200.
                         if(response.status == 200):  
-                            try:                            
+                            try:                      
+                                print("[Resultado] [IA] [consulta] HTTP:" + str(response.status))      
                                 # Intentar conseguir JSON con productos.
                                 # Por cada producto, se debe mapear los campos "cantidad" por "quantity"  y crear campo "product" 
                                 # para que coinicidan con los esperados por API.
@@ -154,10 +155,20 @@ class BotService(BotServiceInterface):
                                 endpoint = "{}/order".format(os.getenv("UVICORN_API_URL"))
                                 headers={"Authorization" : "Bearer {}".format(userInformation["key"])}
                                 async with session.post(endpoint, json=order, headers=headers) as orderResponse:
-                                    print("[Resultado] [orden] HTTP:" + orderResponse.status)
+                                    print("[Resultado] [orden] HTTP:" + str(orderResponse.status))
                                     orderJSON = await orderResponse.json()
                                     # Mostrar orden de manera que el usuario entienda
                                     message = orderJSON
+                                    deliveryDateResponse = datetime.strptime(orderJSON["deliveryDate"], "%Y-%m-%dT%H:%M:%S.%f%z")
+                                    dateResponse = datetime.strptime(orderJSON["date"], "%Y-%m-%dT%H:%M:%S.%f%z")
+                                    
+                                    message= "Tiquete de compra: N°{}\nFecha de compra: {}\nFecha de entrega: {}\n\nTotal: {}\nDetalles:\n\n".format(orderJSON["id"], dateResponse.strftime("%Y-%m-%d"), deliveryDateResponse.strftime("%Y-%m-%d"), orderJSON["total"])
+                                    
+                                    details = list(map(lambda detail : "Cantidad: {} Producto:{} Total: {}\n".format(detail["quantity"],detail["product"]["name"],detail["total"]), orderJSON["orderDetails"]))
+                                    for detail in details:
+                                        message = message + detail
+                                    message = message + "\n¡Gracias por comprar!"
+                                    print(message)
                             except (ValueError, SyntaxError) as e:
                                 print("[Resultado] [recomendación].")
                                 # Si no se puede parsear JSON, es una recomendación.
