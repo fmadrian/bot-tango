@@ -101,7 +101,12 @@ class DatabaseStrategyAsyncMongoDB(DatabaseStrategy):
 
     async def update(self, data):
         query = {"chat_id" : {"$eq": data["chat_id"]}}
-        values = { "$set": { "key": data["key"] } }
+        values = { "$set": { "key": data["key"]} }
+        # Si se pasa orden, agregarla a objeto.
+        if("order" not in data):
+            values["$unset"] = {"order" :""}
+        else:
+            values["$set"] = {"order" : data["order"]}
         await DatabaseStrategyAsyncMongoDB.collection.update_one(query, values)
 
     async def exists(self, data):

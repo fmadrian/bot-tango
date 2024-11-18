@@ -207,7 +207,7 @@ class BotService(BotServiceInterface):
                 # Colocar fecha de entrega seleccionada en orden.
                 order["deliveryDate"] = query
                 # Sin importar selección eliminar orden guardada.
-                await BotService.dbContext.update({"chat_id": update.effective_chat.id, "key": userInformation["key"], "order": None})
+                await BotService.dbContext.update({"chat_id": update.effective_chat.id, "key": userInformation["key"]})
 
                 # Si se selecciona una fecha, se crea la orden.
                 if(query != "cancel"):
@@ -228,7 +228,7 @@ class BotService(BotServiceInterface):
                             for detail in details:
                                 message = message + detail
                             message = message + "\n¡Gracias por comprar!"
-                # Elimina el teclado de selección de fecha
+                # Elimina el teclado de selección de fecha y envía respuesta
                 await update.callback_query.edit_message_reply_markup(None)
                 await update.callback_query.edit_message_text(f"Seleccionó {query} como fecha de entrega.")
             else:
@@ -236,4 +236,5 @@ class BotService(BotServiceInterface):
         except Exception as e:
             print("[ERROR] [orden]: Error realizando orden")
             message = "De momento no puedo atender este mensaje."
+            raise e
         await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
