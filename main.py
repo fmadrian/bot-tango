@@ -5,7 +5,7 @@ from services import BotService
 from contextlib import asynccontextmanager
 from http import HTTPStatus
 from telegram import Update
-from telegram.ext import Application, CommandHandler
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler
 from fastapi import FastAPI, Request, Response
 
 # Desplegar un webhook al cual Telegram enviará los mensajes recibidos.
@@ -43,7 +43,10 @@ async def process_update(request: Request):
 # Añadir los diferentes tipos de eventos que el bot maneja.
 ptb.add_handler(CommandHandler("start", BotService.start))
 ptb.add_handler(CommandHandler("help", BotService.start))
+ptb.add_handler(CommandHandler("ayuda", BotService.start))
 ptb.add_handler(CommandHandler("status", BotService.status))
 ptb.add_handler(CommandHandler("login", BotService.login))
 ptb.add_handler(CommandHandler("logout", BotService.logout))
 ptb.add_handler(CommandHandler("ai", BotService.talkToAI))
+ptb.add_handler(CommandHandler("ia", BotService.talkToAI))
+ptb.add_handler(CallbackQueryHandler(BotService.order))
