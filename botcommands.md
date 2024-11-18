@@ -1,10 +1,15 @@
 
 start - Muestra la guía de ayuda.
+
 help - Muestra la guía de ayuda.
+
 ayuda - Muestra la guía de ayuda.
+
 status - Muestra si ha iniciado sesión o no.
-login  - Inicia sesión.
+
+login <usuario> <contraseña> - Inicia sesión.
+
 logout - Cierra sesión.
-ai - Permite preguntar a la IA por sugerencias o órdenes.
-ia - Permite preguntar a la IA por sugerencias o órdenes.
+
+consulta <consulta> - Permite preguntar a la IA por sugerencias o órdenes.
 
