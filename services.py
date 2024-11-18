@@ -2,15 +2,16 @@ import os
 import aiohttp
 import asyncio
 import ast
+import functools
 from datetime import datetime, timedelta
 
 from abc import ABCMeta, abstractmethod
-from telegram import Update
-from telegram.ext import ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes, CallbackContext
 
 from strategy import DatabaseContext, DatabaseStrategyAsyncMongoDB
 # TODO: Mover a documento con solo texto.
-helpGuide = "Comandos disponibles:\n\n/start\n\n/help\n\n/login <usuario> <contraseña> \n\n/status\n\n/logout\n\n/ai <consulta>"
+helpGuide = "Comandos disponibles:\n\n/start - Muestra la guía de ayuda.\n/help - Muestra la guía de ayuda.\n/ayuda - Muestra la guía de ayuda.\n/status - Muestra si ha iniciado sesión o no.\n/login <usuario> <contraseña>  - Inicia sesión.\n/logout - Cierra sesión.\n/ai <consulta> - Permite preguntar a la IA por sugerencias o órdenes.\n/ia <consulta> - Permite preguntar a la IA por sugerencias o órdenes.\n"
 
 # Interfaz
 class BotServiceInterface(metaclass=ABCMeta):
@@ -35,9 +36,13 @@ class BotServiceInterface(metaclass=ABCMeta):
     async def talkToAI(cls, update: Update, context: ContextTypes.DEFAULT_TYPE):
         raise NotImplementedError
     
+    @classmethod
+    @abstractmethod
+    async def order(cls, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        raise NotImplementedError
     
 
-# Implement interface.
+# Implementar interfaz de servicio.
 class BotService(BotServiceInterface): 
     # session = aiohttp.ClientSession()
     # Definir contexto y pasar MongoDB estrategía.
@@ -47,11 +52,12 @@ class BotService(BotServiceInterface):
     def __init__(self):
         pass
     
-    # Parameters:
+    # Parametros:
     #   update,  objeto que contiene toda la información e información que proviene de Telegram (como el mensaje, o usuario que envió el comando, etc)
     #   context, contiene información sobre el estado de la librería.
 
-    # /start
+
+    # /start /help /ayuda
     @classmethod
     async def start(cls, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=update.effective_chat.id, text=helpGuide)
@@ -97,9 +103,9 @@ class BotService(BotServiceInterface):
                         # Cada registro contiene el ID de chat (único) y el token.
                         exists = await BotService.dbContext.exists({"chat_id": update.effective_chat.id})
                         if(exists == False):    
-                            await BotService.dbContext.create({"chat_id": update.effective_chat.id, "key": token})
+                            await BotService.dbContext.create({"chat_id": update.effective_chat.id, "token": token})
                         else:
-                            await BotService.dbContext.update({"chat_id": update.effective_chat.id, "key": token})
+                            await BotService.dbContext.update({"chat_id": update.effective_chat.id, "token": token})
                     else:
                         message = "No se pudo iniciar sesión"
         
@@ -115,17 +121,18 @@ class BotService(BotServiceInterface):
         # Devolver respuesta.
         await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
 
-    # /ai
+    # /ai, /ia
     @classmethod
     async def talkToAI(cls, update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = ""
+        reply_markup = None
         try:
             loginError="Debe iniciar sesión para poder hablar con la IA.\nUtilice el comando /login <usuario> <contraseña>"
             # Consultar si ya se inicio sesión.
             userInformation = await BotService.dbContext.get({"chat_id": update.effective_chat.id})
             if(userInformation is not None):
                 # Obtener recomendación desde API
-                query = update["message"]["text"].replace("/ai ", "")
+                query = update["message"]["text"].replace("/consulta ", "")
                 params = {"provider":"openaiservice", "question":query}
                 async with aiohttp.ClientSession() as session:
                     endpoint = "{}/unsecure/ia/ask".format(os.getenv("UVICORN_API_URL"))
@@ -148,27 +155,22 @@ class BotService(BotServiceInterface):
                                     }, 
                                     "quantity":p["cantidad"]
                                 }, temp))
+
                                 # Crear orden y devolver información de orden
-                                additonalInformation = "Orden generada con ayuda de ChatGPT desde el bot en Telegram."
-                                deliveryDate =  datetime.now() + timedelta(days=10)
-                                order = {"orderDetails": products, "additonalInformation": additonalInformation, "deliveryDate": "{}-{}-{}".format(deliveryDate.year, deliveryDate.month, deliveryDate.day)}
-                                endpoint = "{}/order".format(os.getenv("UVICORN_API_URL"))
-                                headers={"Authorization" : "Bearer {}".format(userInformation["key"])}
-                                async with session.post(endpoint, json=order, headers=headers) as orderResponse:
-                                    print("[Resultado] [orden] HTTP:" + str(orderResponse.status))
-                                    orderJSON = await orderResponse.json()
-                                    # Mostrar orden de manera que el usuario entienda
-                                    message = orderJSON
-                                    deliveryDateResponse = datetime.strptime(orderJSON["deliveryDate"], "%Y-%m-%dT%H:%M:%S.%f%z")
-                                    dateResponse = datetime.strptime(orderJSON["date"], "%Y-%m-%dT%H:%M:%S.%f%z")
-                                    
-                                    message= "Tiquete de compra: N°{}\nFecha de compra: {}\nFecha de entrega: {}\n\nTotal: {}\nDetalles:\n\n".format(orderJSON["id"], dateResponse.strftime("%Y-%m-%d"), deliveryDateResponse.strftime("%Y-%m-%d"), orderJSON["total"])
-                                    
-                                    details = list(map(lambda detail : "Cantidad: {} Producto:{} Total: {}\n".format(detail["quantity"],detail["product"]["name"],detail["total"]), orderJSON["orderDetails"]))
-                                    for detail in details:
-                                        message = message + detail
-                                    message = message + "\n¡Gracias por comprar!"
-                                    print(message)
+                                additionalInformation = "Orden generada con ayuda de ChatGPT desde el bot en Telegram."
+                                deliveryDate =  datetime.now()
+                                order = {"orderDetails": products, "additionalInformation": additionalInformation, "deliveryDate": "{}-{}-{}".format(deliveryDate.year, deliveryDate.month, deliveryDate.day)}
+                                
+                                # Lista con los 3 días siguientes
+                                buttons = [[InlineKeyboardButton("Cancelar",callback_data="cancel")]]
+                                daysOffered = 3
+                                for d in range(1,daysOffered+1):
+                                    newDate = deliveryDate +timedelta(days=d)
+                                    buttons.append([InlineKeyboardButton(f"{newDate.year}-{newDate.month}-{newDate.day}",callback_data=f"{newDate.year}-{newDate.month}-{newDate.day}")])
+                                reply_markup = InlineKeyboardMarkup(buttons)
+                                # Guardar orden en DB y enviar prompt de confirmación de fecha.
+                                await BotService.dbContext.update({"chat_id": userInformation["chat_id"], "token": userInformation["token"], "order":order})
+                                message = "Seleccione fecha de entrega:"
                             except (ValueError, SyntaxError) as e:
                                 print("[Resultado] [recomendación].")
                                 # Si no se puede parsear JSON, es una recomendación.
@@ -182,6 +184,59 @@ class BotService(BotServiceInterface):
                 message = loginError
         except Exception as e:
             print("[ERROR] [IA]: Error obteniendo respuesta de IA")
-            message = "De momento no puedo atender este mensaje. ex"
+            message = "De momento no puedo atender este mensaje."
 
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=message, reply_markup=reply_markup)
+
+    # Respuesta a selección de fecha de entrega.
+    @classmethod
+    async def order(cls, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        message = ""
+        try:
+            # Obtener fecha de entrega desde respuesta.
+            query = update.callback_query.data
+            await update.callback_query.answer()
+
+            # Obtener registro de usuario.
+            userInformation = await BotService.dbContext.get({"chat_id": update.effective_chat.id})
+
+            if(userInformation is not None):
+                # Obtener orden desde DB.
+                order = userInformation["order"]
+                # Colocar fecha de entrega seleccionada en orden.
+                order["deliveryDate"] = query
+                # Sin importar selección eliminar orden guardada.
+                await BotService.dbContext.update({"chat_id": update.effective_chat.id, "token": userInformation["token"]})
+
+                # Elimina el teclado de selección de fecha
+                await update.callback_query.edit_message_reply_markup(None)    
+
+                # Si se selecciona una fecha, se crea la orden.
+                if(query != "cancel"):
+                    # Realzar orden.
+                    endpoint = "{}/order".format(os.getenv("UVICORN_API_URL"))
+                    headers={"Authorization" : "Bearer {}".format(userInformation["token"])}
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(endpoint, json=order, headers=headers) as response:
+                            print("[Resultado] [orden] HTTP:" + str(response.status))
+                            responseJSON = await response.json()
+                            # Mostrar orden de manera que el usuario la pueda leer.
+                            deliveryDateResponse = datetime.strptime(responseJSON["deliveryDate"], "%Y-%m-%dT%H:%M:%S.%f%z")
+                            dateResponse = datetime.strptime(responseJSON["date"], "%Y-%m-%dT%H:%M:%S.%f%z")
+                            
+                            message= "Tiquete de compra: N°{}\nFecha de compra: {}\nFecha de entrega: {}\n\nTotal: {}\nInformación adicional: {}\n\nDetalles:\n".format(responseJSON["id"], dateResponse.strftime("%Y-%m-%d"), deliveryDateResponse.strftime("%Y-%m-%d"), responseJSON["total"], responseJSON["additionalInformation"])
+                            
+                            details = list(map(lambda detail : "Cantidad: {} || Producto:{} || Total: {}\n".format(detail["quantity"],detail["product"]["name"],detail["total"]), responseJSON["orderDetails"]))
+                            for detail in details:
+                                message = message + detail
+                            message = message + "\n¡Gracias por comprar!"
+                    # Ajustar mensaje previo (donde se coloca el teclado).
+                    await update.callback_query.edit_message_text(f"Seleccionó {query} como fecha de entrega.")
+                else:
+                    await update.callback_query.edit_message_text("Se ha cancelado la orden.")
+            else:
+                message = "Debe iniciar sesión para poder comprar."
+        except Exception as e:
+            print("[ERROR] [orden]: Error realizando orden")
+            message = "De momento no puedo atender este mensaje."
         await context.bot.send_message(chat_id=update.effective_chat.id, text=message)

@@ -96,12 +96,17 @@ class DatabaseStrategyAsyncMongoDB(DatabaseStrategy):
 
 
     async def create(self, data):
-        data = {"_id": ObjectId(), "chat_id": data["chat_id"], "key": data["key"]}
+        data = {"_id": ObjectId(), "chat_id": data["chat_id"], "token": data["token"]}
         await DatabaseStrategyAsyncMongoDB.collection.insert_one(data)
 
     async def update(self, data):
         query = {"chat_id" : {"$eq": data["chat_id"]}}
-        values = { "$set": { "key": data["key"] } }
+        values = { "$set": { "token": data["token"]} }
+        # Si se pasa orden, agregarla a objeto.
+        if("order" not in data):
+            values["$unset"] = {"order" :""}
+        else:
+            values["$set"] = {"order" : data["order"]}
         await DatabaseStrategyAsyncMongoDB.collection.update_one(query, values)
 
     async def exists(self, data):
@@ -117,36 +122,3 @@ class DatabaseStrategyAsyncMongoDB(DatabaseStrategy):
     async def delete(self, data):
          query = {"chat_id" : {"$eq": data["chat_id"]}}
          await DatabaseStrategyAsyncMongoDB.collection.delete_one(query)
-
-
-"""
-# No sirve estrategía porque no es asíncrona.
-class DatabaseStrategyMongoDB(DatabaseStrategy):
-
-    client: MongoClient = MongoClient(os.getenv("UVICORN_MONGODB_CONNECTION_STRING"))
-    db: Database = client.get_database("tango")
-    collection: Collection = db.get_collection("sessions")
-
-    def create(self, data):
-        # Crear registro en base de datos si existe, de lo contrario, actualizar el existente.
-        exists = self.get({"chat_id": data["chat_id"]})
-        if(exists == False):
-            DatabaseStrategyMongoDB.collection.insert_one({"_id": ObjectId(), "chat_id": data["chat_id"], "key": data["key"]})
-        else:
-            self.update(data)
-
-    def update(self, data):
-        query = { "chat_id": data["chat_id"] }
-        values = { "$set": { "key": data["key"] } }
-        DatabaseStrategyMongoDB.collection.update_one(query, values)
-        pass
-
-    def get(self, data):
-        result = DatabaseStrategyMongoDB.collection.find_one(data)
-        print(result != None)
-        return result != None 
-
-    def delete(self, data):
-        DatabaseStrategyMongoDB.collection.delete_one(data)
-        pass
-"""
