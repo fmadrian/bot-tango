@@ -42,7 +42,7 @@ class BotServiceInterface(metaclass=ABCMeta):
         raise NotImplementedError
     
 
-# Implement interface.
+# Implementar interfaz de servicio.
 class BotService(BotServiceInterface): 
     # session = aiohttp.ClientSession()
     # Definir contexto y pasar MongoDB estrategía.
@@ -103,9 +103,9 @@ class BotService(BotServiceInterface):
                         # Cada registro contiene el ID de chat (único) y el token.
                         exists = await BotService.dbContext.exists({"chat_id": update.effective_chat.id})
                         if(exists == False):    
-                            await BotService.dbContext.create({"chat_id": update.effective_chat.id, "key": token})
+                            await BotService.dbContext.create({"chat_id": update.effective_chat.id, "token": token})
                         else:
-                            await BotService.dbContext.update({"chat_id": update.effective_chat.id, "key": token})
+                            await BotService.dbContext.update({"chat_id": update.effective_chat.id, "token": token})
                     else:
                         message = "No se pudo iniciar sesión"
         
@@ -132,7 +132,7 @@ class BotService(BotServiceInterface):
             userInformation = await BotService.dbContext.get({"chat_id": update.effective_chat.id})
             if(userInformation is not None):
                 # Obtener recomendación desde API
-                query = update["message"]["text"].replace("/ai ", "")
+                query = update["message"]["text"].replace("/consulta ", "")
                 params = {"provider":"openaiservice", "question":query}
                 async with aiohttp.ClientSession() as session:
                     endpoint = "{}/unsecure/ia/ask".format(os.getenv("UVICORN_API_URL"))
@@ -169,7 +169,7 @@ class BotService(BotServiceInterface):
                                     buttons.append([InlineKeyboardButton(f"{newDate.year}-{newDate.month}-{newDate.day}",callback_data=f"{newDate.year}-{newDate.month}-{newDate.day}")])
                                 reply_markup = InlineKeyboardMarkup(buttons)
                                 # Guardar orden en DB y enviar prompt de confirmación de fecha.
-                                await BotService.dbContext.update({"chat_id": userInformation["chat_id"], "key": userInformation["key"], "order":order})
+                                await BotService.dbContext.update({"chat_id": userInformation["chat_id"], "token": userInformation["token"], "order":order})
                                 message = "Seleccione fecha de entrega:"
                             except (ValueError, SyntaxError) as e:
                                 print("[Resultado] [recomendación].")
@@ -185,7 +185,6 @@ class BotService(BotServiceInterface):
         except Exception as e:
             print("[ERROR] [IA]: Error obteniendo respuesta de IA")
             message = "De momento no puedo atender este mensaje."
-            raise e
 
         await context.bot.send_message(chat_id=update.effective_chat.id, text=message, reply_markup=reply_markup)
 
@@ -207,13 +206,16 @@ class BotService(BotServiceInterface):
                 # Colocar fecha de entrega seleccionada en orden.
                 order["deliveryDate"] = query
                 # Sin importar selección eliminar orden guardada.
-                await BotService.dbContext.update({"chat_id": update.effective_chat.id, "key": userInformation["key"]})
+                await BotService.dbContext.update({"chat_id": update.effective_chat.id, "token": userInformation["token"]})
+
+                # Elimina el teclado de selección de fecha
+                await update.callback_query.edit_message_reply_markup(None)    
 
                 # Si se selecciona una fecha, se crea la orden.
                 if(query != "cancel"):
                     # Realzar orden.
                     endpoint = "{}/order".format(os.getenv("UVICORN_API_URL"))
-                    headers={"Authorization" : "Bearer {}".format(userInformation["key"])}
+                    headers={"Authorization" : "Bearer {}".format(userInformation["token"])}
                     async with aiohttp.ClientSession() as session:
                         async with session.post(endpoint, json=order, headers=headers) as response:
                             print("[Resultado] [orden] HTTP:" + str(response.status))
@@ -228,13 +230,13 @@ class BotService(BotServiceInterface):
                             for detail in details:
                                 message = message + detail
                             message = message + "\n¡Gracias por comprar!"
-                # Elimina el teclado de selección de fecha y envía respuesta
-                await update.callback_query.edit_message_reply_markup(None)
-                await update.callback_query.edit_message_text(f"Seleccionó {query} como fecha de entrega.")
+                    # Ajustar mensaje previo (donde se coloca el teclado).
+                    await update.callback_query.edit_message_text(f"Seleccionó {query} como fecha de entrega.")
+                else:
+                    await update.callback_query.edit_message_text("Se ha cancelado la orden.")
             else:
                 message = "Debe iniciar sesión para poder comprar."
         except Exception as e:
             print("[ERROR] [orden]: Error realizando orden")
             message = "De momento no puedo atender este mensaje."
-            raise e
         await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
