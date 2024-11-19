@@ -159,7 +159,7 @@ class BotService(BotServiceInterface):
                                 # Crear orden y devolver información de orden
                                 additionalInformation = "Orden generada con ayuda de ChatGPT desde el bot en Telegram."
                                 deliveryDate =  datetime.now()
-                                order = {"orderDetails": products, "additionalInformation": additionalInformation, "deliveryDate": "{}-{}-{}".format(deliveryDate.year, deliveryDate.month, deliveryDate.day)}
+                                order = {"orderDetails": products, "additionalInformation": additionalInformation, "deliveryDate": "{}-{}-{}".format(deliveryDate.year, deliveryDate.month, deliveryDate.day), "orderStatus" : {"id" : 1, "name": "Pendiente"}}
                                 
                                 # Lista con los 3 días siguientes
                                 buttons = [[InlineKeyboardButton("Cancelar",callback_data="cancel")]]
