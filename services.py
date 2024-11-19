@@ -11,7 +11,7 @@ from telegram.ext import ContextTypes, CallbackContext
 
 from strategy import DatabaseContext, DatabaseStrategyAsyncMongoDB
 # TODO: Mover a documento con solo texto.
-helpGuide = "Comandos disponibles:\n\n/start - Muestra la guía de ayuda.\n/help - Muestra la guía de ayuda.\n/ayuda - Muestra la guía de ayuda.\n/status - Muestra si ha iniciado sesión o no.\n/login <usuario> <contraseña>  - Inicia sesión.\n/logout - Cierra sesión.\n/consulta <consulta> - Permite preguntar a la IA por sugerencias o órdenes."
+helpGuide = "Comandos disponibles:\n\n/start - Muestra la guía de ayuda.\n/help - Muestra la guía de ayuda.\n/ayuda - Muestra la guía de ayuda.\n/status - Muestra si ha iniciado sesión o no.\n/login <usuario> <contraseña>  - Inicia sesión.\n/logout - Cierra sesión.\n/consulta <consulta> - Permite preguntar a la IA por sugerencias o órdenes.\n/ordenes - Muestra órdenes del usuario."
 
 # Interfaz
 class BotServiceInterface(metaclass=ABCMeta):
@@ -41,6 +41,10 @@ class BotServiceInterface(metaclass=ABCMeta):
     async def order(cls, update: Update, context: ContextTypes.DEFAULT_TYPE):
         raise NotImplementedError
     
+    @classmethod
+    @abstractmethod
+    async def orders(cls, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        raise NotImplementedError
 
 # Implementar interfaz de servicio.
 class BotService(BotServiceInterface): 
@@ -66,8 +70,21 @@ class BotService(BotServiceInterface):
     @classmethod
     async def status(cls, update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Consultar si ya se inicio sesión.
-        result = await BotService.dbContext.exists({"chat_id": update.effective_chat.id})
-        text = "Ya inició sesión." if result == True else "No ha iniciado sesión."
+        user = await BotService.dbContext.get({"chat_id": update.effective_chat.id})
+        if user is not None:
+             # Llamar API y obtener la información del usuario token.
+            endpoint = "{}/users/me".format(os.getenv("UVICORN_API_URL"))
+            headers={"Authorization" : "Bearer {}".format(user["token"])}
+            async with aiohttp.ClientSession() as session:
+                async with session.get(endpoint, headers=headers) as response:
+                    if(response.status == 200):
+                        json = await response.json()
+                        text = f"Información de usuario:\n\nNombre: {json["firstName"]} {json["lastName"]}\nCorreo: {json["email"]}\nDirección: {json["address"]}"
+                    else:
+                        text = "No puedo responder a esta solicitud en este momento."
+        else:
+            text = "No ha iniciado sesión."
+
         # Devolver respuesta.
         await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
     
@@ -121,7 +138,7 @@ class BotService(BotServiceInterface):
         # Devolver respuesta.
         await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
 
-    # /ai, /ia
+    # /consulta
     @classmethod
     async def talkToAI(cls, update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = ""
@@ -240,3 +257,33 @@ class BotService(BotServiceInterface):
             print("[ERROR] [orden]: Error realizando orden")
             message = "De momento no puedo atender este mensaje."
         await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
+    
+    # /ordenes
+    @classmethod
+    async def orders(cls, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text=""
+        # Consultar si ya se inicio sesión.
+        user = await BotService.dbContext.get({"chat_id": update.effective_chat.id})
+        if user is not None:
+             # Llamar API y obtener la información del usuario token.
+            endpoint = "{}/users/me".format(os.getenv("UVICORN_API_URL"))
+            headers={"Authorization" : "Bearer {}".format(user["token"])}
+            async with aiohttp.ClientSession() as session:
+                async with session.get(endpoint, headers=headers) as response:
+                    if(response.status == 200):
+                        json = await response.json()
+                        endpoint = f"{os.getenv("UVICORN_API_URL")}/users/orders"
+                        async with session.get(endpoint, headers=headers) as orderResponse:                            
+                            ordersJSON = await orderResponse.json()
+                            if(len(ordersJSON)> 0):
+                                text = "Órdenes de usuario:\n=======\n"
+                                for order in ordersJSON:
+                                    text = text + f"\nID: {order["id"]}\nFecha: {(order["date"])[0:10]}\nFecha de entrega: {(order["deliveryDate"])[0:10]}\nTotal: {order["total"]}\nEstado: {order["orderStatus"]["name"]}\nInformación adicional: {order["additionalInformation"] if order["additionalInformation"] is not None else "" }\n=======\n"
+                            else:
+                                text = "No hay ordenes para mostrar."
+                    else:
+                        text = "No puedo responder a esta solicitud en este momento."
+        else:
+            text = "No ha iniciado sesión."
+        # Devolver respuesta.
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=text)

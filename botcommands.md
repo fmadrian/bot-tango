@@ -13,3 +13,4 @@ logout - Cierra sesión.
 
 consulta <consulta> - Permite preguntar a la IA por sugerencias o órdenes.
 
+ordenes - Muestra órdenes del usuario.
