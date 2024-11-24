@@ -10,7 +10,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackContext
 
 from strategy import DatabaseContext, DatabaseStrategyAsyncMongoDB
-# TODO: Mover a documento con solo texto.
+
 helpGuide = "Comandos disponibles:\n\n/start - Muestra la guía de ayuda.\n/help - Muestra la guía de ayuda.\n/ayuda - Muestra la guía de ayuda.\n/status - Muestra si ha iniciado sesión o no.\n/login <usuario> <contraseña>  - Inicia sesión.\n/logout - Cierra sesión.\n/consulta <consulta> - Permite preguntar a la IA por sugerencias o órdenes.\n/ordenes - Muestra órdenes del usuario."
 
 # Interfaz
