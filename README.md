@@ -2,7 +2,7 @@
 
 ## Description
 
-This Telegram bot was made as part of @fernanda-una's and @fmadrian's "Web-based application development (EIF509)" project FlorArte and it allows clients to authenticate themselves, see their information, get suggestions about products, place orders, and search previous orders they made.
+This Telegram bot was made as part of @fernanda-una and @fmadrian's ["Web-based application development (EIF509)" project (FlorArte)](https://www.github.com/fmadrian/florarte) and it allows clients to authenticate themselves, see their information, get suggestions about products, place orders, and search previous orders they made.
 
 ## What is it made with?
 
@@ -13,6 +13,12 @@ This Telegram bot was made with Python, python-telegram-bot, and MongoDB which h
 - Login, logout, and check their authentication status.
 - Ask an AI assistant about product suggestions based on tags or categories, and placing orders.
 - Place and get a list of orders they have made.
+
+## AI Assistant
+
+The AI assistant is available in both [web client](https://github.com/una-eif509-desarrolloweb-24G01/frontend-tango) and Telegram bot. It uses [OpenAI's API](https://platform.openai.com/docs/overview) to help customers: 
+- Get recommendations of what products (which are offered/available in the catalog) to buy according to their needs.
+- Place orders.
 
 ## Requirements
 
@@ -51,5 +57,5 @@ Getting a recommendation using the bot
 ![Getting a recommendation using the bot](https://raw.githubusercontent.com/fmadrian/florarte/refs/heads/main/images/8.png)
 Placing an order using the bot.
 ![Placing an order using the bot](https://raw.githubusercontent.com/fmadrian/florarte/refs/heads/main/images/10.png)
-Visualizing order placed using the bot and AI assistant.
-![Visualizing order placed using bot and AI assistant](https://raw.githubusercontent.com/fmadrian/florarte/refs/heads/main/images/15.png)
+Viewing order placed using the bot and AI assistant.
+![Viewing order placed using bot and AI assistant](https://raw.githubusercontent.com/fmadrian/florarte/refs/heads/main/images/15.png)
